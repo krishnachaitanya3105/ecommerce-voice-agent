@@ -1,0 +1,26 @@
+[
+  {
+    "id": "variables",
+    "title": "Variables",
+    "summary": "Variables store values in memory so programs can access and modify them. Each variable has a name, a type, and a value. They help reuse values multiple times without rewriting them.",
+    "sample_question": "What is a variable and why is it important in programming?"
+  },
+  {
+    "id": "loops",
+    "title": "Loops",
+    "summary": "Loops allow repeating a block of code multiple times. 'For' loops run when the number of iterations is known, while 'while' loops run until a condition changes.",
+    "sample_question": "Explain the difference between a for loop and a while loop."
+  },
+  {
+    "id": "binary_search",
+    "title": "Binary Search",
+    "summary": "Binary Search is an efficient way to search a sorted array by repeatedly dividing the search range in half. This reduces time complexity to O(log n).",
+    "sample_question": "Why is binary search faster than linear search?"
+  },
+  {
+    "id": "oop_basics",
+    "title": "OOP Basics",
+    "summary": "Object-Oriented Programming organizes code into objects and classes. Four key principles: Encapsulation, Inheritance, Polymorphism, and Abstraction.",
+    "sample_question": "What are the four pillars of OOP?"
+  }
+]
