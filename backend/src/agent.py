@@ -1,26 +1,18 @@
-"""
-DSA Tutor Agent – Day 4 Teach-the-Tutor
-Company: CodeSense Academy
-
-This single-file agent follows the Day-4 Teach-the-Tutor pattern:
-- Small JSON knowledge base (auto-created)
-- Three modes: learn (Matthew), quiz (Alicia), teach_back (Ken)
-- User can switch mode anytime
-- Evaluates user explanation using keyword overlap scoring
-- Uses Murf Falcon + LiveKit Agents
-
-Run: python dsa_tutor_agent.py
-"""
-
 import logging
 import json
 import os
-from dataclasses import dataclass
-from typing import Literal, Optional, Annotated
+import asyncio
+from datetime import datetime
+from typing import Annotated, Optional
+from dataclasses import dataclass, asdict
+
+print("\n" + "💼" * 50)
+print("🚀 AI SDR AGENT (PROJECT MANAGEMENT — ZOHO PROJECTS)")
+print("💡 SDR_Agent.py LOADED SUCCESSFULLY!")
+print("💼" * 50 + "\n")
 
 from dotenv import load_dotenv
 from pydantic import Field
-
 from livekit.agents import (
     Agent,
     AgentSession,
@@ -33,224 +25,468 @@ from livekit.agents import (
     RunContext,
 )
 
-# Voice + STT Plugins
+# Plugins
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-logger = logging.getLogger("dsa_tutor_agent")
+logger = logging.getLogger("agent")
 load_dotenv(".env.local")
 
-# -----------------------------
-# Company Name
-# -----------------------------
-COMPANY_NAME = "CodeSense Academy"
 
-# -----------------------------
-# Content JSON
-# -----------------------------
-DATA_DIR = "shared-data"
-CONTENT_FILE = os.path.join(DATA_DIR, "dsa_tutor_content.json")
+# ======================================================
+# 📌 1. DATA PATHS (store data folder outside src/)
+# ======================================================
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(BACKEND_DIR, "zoho_projects_data")
+FAQ_FILE = "zoho_projects_faq.json"
+LEADS_FILE = "zoho_projects_leads.json"
 
-DEFAULT_CONTENT = [
+# ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
+FAQ_PATH = os.path.join(DATA_DIR, FAQ_FILE)
+LEADS_PATH = os.path.join(DATA_DIR, LEADS_FILE)
+
+
+# ======================================================
+# 📌 2. DEFAULT FAQ CONTENT + FEATURE DETAILS
+# ======================================================
+
+DEFAULT_FAQ = [
     {
-        "id": "variables",
-        "title": "Variables",
-        "summary": "Variables store values in memory so programs can access and modify them. Each variable has a name, a type, and a value. They help reuse values multiple times without rewriting them.",
-        "sample_question": "What is a variable and why is it important in programming?"
+        "question": "What is Zoho Projects?",
+        "answer": (
+            "Zoho Projects is a cloud-based project management tool that helps teams plan tasks, "
+            "track progress, collaborate, and manage workflows efficiently."
+        ),
     },
     {
-        "id": "loops",
-        "title": "Loops",
-        "summary": "Loops allow repeating a block of code multiple times. 'For' loops run when the number of iterations is known, while 'while' loops run until a condition changes.",
-        "sample_question": "Explain the difference between a for loop and a while loop."
+        "question": "Who is Zoho Projects for?",
+        "answer": (
+            "Zoho Projects is ideal for teams in software development, marketing, agencies, operations, "
+            "and any team that needs to plan and track projects with deadlines."
+        ),
     },
     {
-        "id": "binary_search",
-        "title": "Binary Search",
-        "summary": "Binary Search is an efficient way to search a sorted array by repeatedly dividing the search range in half. This reduces time complexity to O(log n).",
-        "sample_question": "Why is binary search faster than linear search?"
+        "question": "Do you have a free plan?",
+        "answer": (
+            "Yes. Zoho Projects offers a free plan with limited projects and users, suitable for small teams "
+            "who are just getting started."
+        ),
     },
     {
-        "id": "oop_basics",
-        "title": "OOP Basics",
-        "summary": "Object-Oriented Programming organizes code into objects and classes. Four key principles: Encapsulation, Inheritance, Polymorphism, and Abstraction.",
-        "sample_question": "What are the four pillars of OOP?"
-    }
+        "question": "What is your pricing?",
+        "answer": (
+            "Zoho Projects has paid plans such as Premium and Enterprise with per-user monthly pricing. "
+            "Pricing varies based on features and billing cycle, and can be viewed on the Zoho Projects pricing page."
+        ),
+    },
+    {
+        "question": "Do you offer a free trial?",
+        "answer": "Yes. Zoho Projects offers a free trial period on its paid plans so you can try all features before upgrading.",
+    },
+    {
+        "question": "Do you offer mobile apps?",
+        "answer": "Yes. Zoho Projects has mobile apps for iOS and Android so you can manage tasks on the go.",
+    },
+    {
+        "question": "Do you support integrations?",
+        "answer": (
+            "Yes. Zoho Projects integrates with Zoho apps and third-party tools like Google Workspace, "
+            "Microsoft Office 365, Slack, GitHub, and more."
+        ),
+    },
+    {
+        "question": "Do you offer time tracking?",
+        "answer": (
+            "Yes. Zoho Projects includes built-in time tracking with timesheets, billable hours, and time reports."
+        ),
+    },
 ]
 
+# Detailed feature descriptions (used by the new tool)
+FEATURES = {
+    "task management": {
+        "title": "Task Management",
+        "summary": (
+            "Create tasks, assign owners, set priorities and deadlines, and organize work into task lists. "
+            "You can add checklists, attachments, comments, and track status from start to completion."
+        ),
+        "highlights": [
+            "Create and assign tasks to team members",
+            "Set priorities, due dates, and reminders",
+            "Use subtasks and checklists for detailed workflows",
+            "Add comments, files, and links for context",
+        ],
+    },
+    "gantt charts": {
+        "title": "Gantt Charts",
+        "summary": (
+            "Visualize project timelines, dependencies, and milestones with interactive Gantt charts. "
+            "Easily drag and adjust tasks as plans change."
+        ),
+        "highlights": [
+            "View project schedule along a timeline",
+            "Set task dependencies and adjust them visually",
+            "Track milestones and critical paths",
+            "Compare planned vs actual timelines in higher plans",
+        ],
+    },
+    "time tracking": {
+        "title": "Time Tracking & Timesheets",
+        "summary": (
+            "Track how much time is spent on each task or project using timesheets and timers, "
+            "and generate reports for billing or productivity analysis."
+        ),
+        "highlights": [
+            "Start timers directly on tasks",
+            "Log hours manually into timesheets",
+            "Separate billable and non-billable hours",
+            "Export time data for clients or payroll",
+        ],
+    },
+    "collaboration": {
+        "title": "Team Collaboration",
+        "summary": (
+            "Keep all project communication in one place with comments, feeds, chat, forums, and file sharing."
+        ),
+        "highlights": [
+            "Comment directly on tasks and issues",
+            "Use project feeds to see recent updates",
+            "Create project forums for discussions",
+            "Upload and share files with version history",
+        ],
+    },
+    "automation": {
+        "title": "Automation & Blueprints",
+        "summary": (
+            "Automate repetitive steps in your workflows using Blueprints, custom rules, and notifications."
+        ),
+        "highlights": [
+            "Define step-by-step workflows for tasks",
+            "Trigger actions when tasks move between stages",
+            "Send automated reminders and notifications",
+            "Reduce manual work and enforce processes",
+        ],
+    },
+    "integrations": {
+        "title": "Integrations",
+        "summary": (
+            "Connect Zoho Projects with other tools you already use, including Zoho apps and third-party services."
+        ),
+        "highlights": [
+            "Integrate with Zoho CRM, Zoho Books, Zoho Sprints, and more",
+            "Connect with Google Workspace and Microsoft Office 365",
+            "Use Slack, GitHub, Bitbucket integrations",
+            "Automate workflows further using integration platforms",
+        ],
+    },
+    "reports": {
+        "title": "Reports & Dashboards",
+        "summary": (
+            "Get visibility into project progress, resource utilization, and time spent with built-in reports and dashboards."
+        ),
+        "highlights": [
+            "Track project status with visual dashboards",
+            "View workload and utilization reports",
+            "Analyze timesheet data and task metrics",
+            "Export reports for stakeholders or clients",
+        ],
+    },
+    "mobile apps": {
+        "title": "Mobile Apps",
+        "summary": (
+            "Manage projects from anywhere with Zoho Projects mobile apps on iOS and Android."
+        ),
+        "highlights": [
+            "Create and update tasks on the go",
+            "Track time from your phone",
+            "Get push notifications for important updates",
+            "Collaborate with your team remotely",
+        ],
+    },
+}
 
-def ensure_content_file():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(CONTENT_FILE):
-        with open(CONTENT_FILE, "w", encoding="utf-8") as f:
-            json.dump(DEFAULT_CONTENT, f, indent=2)
-        print(f"Created DSA content at {CONTENT_FILE}")
+
+def load_faq():
+    """Create FAQ file if missing, then load it."""
+    try:
+        if not os.path.exists(FAQ_PATH):
+            with open(FAQ_PATH, "w", encoding="utf-8") as f:
+                json.dump(DEFAULT_FAQ, f, indent=4)
+
+        with open(FAQ_PATH, "r", encoding="utf-8") as f:
+            return json.dumps(json.load(f))
+    except Exception as e:
+        print("⚠️ FAQ Load Error:", e)
+        return ""
 
 
-def load_content():
-    ensure_content_file()
-    with open(CONTENT_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+STORE_FAQ_TEXT = load_faq()
 
 
-COURSE_CONTENT = load_content()
+# ======================================================
+# 📌 3. LEAD DATA STRUCTURE
+# ======================================================
 
-# -----------------------------
-# State
-# -----------------------------
 @dataclass
-class TutorState:
-    current_topic_id: Optional[str] = None
-    current_topic_data: Optional[dict] = None
-    mode: Literal["learn", "quiz", "teach_back"] = "learn"
+class LeadProfile:
+    name: Optional[str] = None
+    company: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    use_case: Optional[str] = None
+    team_size: Optional[str] = None
+    timeline: Optional[str] = None
 
-    def set_topic(self, topic_id: str) -> bool:
-        topic_id = topic_id.lower()
-        topic = next((t for t in COURSE_CONTENT if t["id"] == topic_id), None)
-        if topic:
-            self.current_topic_id = topic_id
-            self.current_topic_data = topic
-            return True
-        return False
+    def is_qualified(self):
+        # Simple qualification rule: at least name, email, and use case
+        return all([self.name, self.email, self.use_case])
 
 
 @dataclass
 class Userdata:
-    tutor_state: TutorState
-    agent_session: Optional[AgentSession] = None
+    lead_profile: LeadProfile
 
 
-# -----------------------------
-# Tools
-# -----------------------------
-@function_tool
-async def select_topic(
-    ctx: RunContext[Userdata],
-    topic_id: Annotated[str, Field(description="Topic ID to select")]
-) -> str:
-    state = ctx.userdata.tutor_state
-    ok = state.set_topic(topic_id)
-    if ok:
-        return f"Topic set to {state.current_topic_data['title']}. You can now 'learn', 'quiz', or 'teach_back'."
-    avail = ", ".join([t["id"] for t in COURSE_CONTENT])
-    return f"Topic not found. Available topics: {avail}"
-
+# ======================================================
+# 📌 4. LEAD CAPTURE TOOLS
+# ======================================================
 
 @function_tool
-async def set_learning_mode(
+async def update_lead_profile(
     ctx: RunContext[Userdata],
-    mode: Annotated[str, Field(description="learn | quiz | teach_back")]
+    name: Annotated[Optional[str], Field(description="Customer name")] = None,
+    company: Annotated[Optional[str], Field(description="Company name")] = None,
+    email: Annotated[Optional[str], Field(description="Email address")] = None,
+    role: Annotated[Optional[str], Field(description="Job role")] = None,
+    use_case: Annotated[Optional[str], Field(description="User goal / use case for Zoho Projects")] = None,
+    team_size: Annotated[Optional[str], Field(description="Team size using Zoho Projects")] = None,
+    timeline: Annotated[Optional[str], Field(description="Timeline to start (now / soon / later)")] = None,
 ) -> str:
-    state = ctx.userdata.tutor_state
-    mode = mode.lower()
 
-    if mode not in ("learn", "quiz", "teach_back"):
-        return "Mode must be one of: learn, quiz, teach_back."
+    profile = ctx.userdata.lead_profile
 
-    state.mode = mode
-    session = ctx.userdata.agent_session
+    # Update only the fields provided
+    if name:
+        profile.name = name.strip()
+    if company:
+        profile.company = company.strip()
+    if email:
+        profile.email = email.strip()
+    if role:
+        profile.role = role.strip()
+    if use_case:
+        profile.use_case = use_case.strip()
+    if team_size:
+        profile.team_size = team_size.strip()
+    if timeline:
+        profile.timeline = timeline.strip()
 
-    # Set correct Murf Falcon voice per mode
-    if session:
-        if mode == "learn":
-            session.tts.update_options(voice="en-US-matthew", style="Promo")
-        elif mode == "quiz":
-            session.tts.update_options(voice="en-US-alicia", style="Conversational")
-        else:
-            session.tts.update_options(voice="en-US-ken", style="Promo")
+    print("📝 LEAD UPDATED:", profile)
+    # Helpful return so the agent can speak a confirmation
+    confirmations = []
+    if name:
+        confirmations.append(f"name = {profile.name}")
+    if email:
+        confirmations.append(f"email = {profile.email}")
+    if role:
+        confirmations.append(f"role = {profile.role}")
+    if company and profile.company:
+        confirmations.append(f"company = {profile.company}")
+    if use_case:
+        confirmations.append(f"use_case = {profile.use_case}")
+    if team_size:
+        confirmations.append(f"team_size = {profile.team_size}")
+    if timeline:
+        confirmations.append(f"timeline = {profile.timeline}")
 
-    return f"Switched to {mode} mode."
-
-
-@function_tool
-async def evaluate_teaching(
-    ctx: RunContext[Userdata],
-    user_explanation: Annotated[str, Field(description="User's explanation for teach-back")]
-) -> str:
-    topic = ctx.userdata.tutor_state.current_topic_data or {}
-    summary = topic.get("summary", "")
-    expected_words = set(w.strip('.,?!').lower() for w in summary.split())
-    answer_words = set(w.strip('.,?!').lower() for w in user_explanation.split())
-
-    if not expected_words:
-        return "No topic selected to evaluate."
-
-    overlap = expected_words & answer_words
-    score = int((len(overlap) / max(1, len(expected_words))) * 10)
-
-    if score >= 8:
-        feedback = "Excellent — you covered the key ideas well!"
-    elif score >= 5:
-        feedback = "Good — but you can add more details."
-    elif score >= 3:
-        feedback = "You explained some parts — try being more structured."
+    if confirmations:
+        return "Got it — " + ", ".join(confirmations) + "."
     else:
-        feedback = "Try again with more details and examples."
-
-    return f"Score: {score}/10. {feedback}"
+        return "Got it. Thanks!"
 
 
-# -----------------------------
-# MAIN AGENT
-# -----------------------------
-class DSATutorAgent(Agent):
+@function_tool
+async def submit_lead_and_end(ctx: RunContext[Userdata]) -> str:
+    """Save to JSON file (no extra dependencies)."""
+
+    profile = ctx.userdata.lead_profile
+
+    entry = asdict(profile)
+    entry["timestamp"] = datetime.now().isoformat()
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(LEADS_PATH), exist_ok=True)
+
+    leads = []
+    if os.path.exists(LEADS_PATH):
+        try:
+            with open(LEADS_PATH, "r", encoding="utf-8") as f:
+                leads = json.load(f)
+        except Exception as e:
+            print("⚠️ Error loading existing leads:", e)
+            leads = []
+
+    # If company is missing we just keep it as None or empty; no special handling needed
+    if not entry.get("company"):
+        entry["company"] = entry.get("company")  # keep None or empty
+
+    # Append and save
+    leads.append(entry)
+
+    try:
+        with open(LEADS_PATH, "w", encoding="utf-8") as f:
+            json.dump(leads, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print("⚠️ Error saving lead file:", e)
+        return "Sorry, there was an error saving your details. Please try again."
+
+    print(f"✅ LEAD SAVED → {LEADS_PATH}")
+
+    # Friendly spoken confirmation
+    friendly_name = profile.name if profile.name else "there"
+    email_note = f" We'll email more details to {profile.email}." if profile.email else ""
+    return (
+        f"Thanks {friendly_name}! Your details have been saved.{email_note} Have a great day!"
+    )
+
+
+# ======================================================
+# 📌 4b. FEATURE DETAILS TOOL
+# ======================================================
+
+@function_tool
+async def get_feature_details(
+    ctx: RunContext[Userdata],
+    feature_name: Annotated[str, Field(description="Feature name to fetch details for, e.g., 'Task Management', 'Gantt Charts', 'Time Tracking'")],
+) -> str:
+    """Return a summary and highlights for a requested feature if available."""
+    key = feature_name.strip().lower()
+
+    # Try exact key match first
+    if key in FEATURES:
+        f = FEATURES[key]
+        highlights_text = "\n  - ".join(f["highlights"]) if f.get("highlights") else ""
+        return (
+            f"{f['title']}.\n"
+            f"Summary: {f.get('summary')}\n"
+            f"Key points:\n  - {highlights_text}"
+        )
+
+    # Fuzzy match based on title containing the query
+    for k, f in FEATURES.items():
+        if feature_name.strip().lower() in f["title"].lower():
+            highlights_text = "\n  - ".join(f["highlights"]) if f.get("highlights") else ""
+            return (
+                f"{f['title']}.\n"
+                f"Summary: {f.get('summary')}\n"
+                f"Key points:\n  - {highlights_text}"
+            )
+
+    # not found
+    return (
+        "Sorry — I couldn't find details for that feature. "
+        "You can ask about: Task Management, Gantt Charts, Time Tracking, Collaboration, Automation, Integrations, Reports, or Mobile Apps."
+    )
+
+
+# ======================================================
+# 📌 5. SDR AGENT (Maya)
+# ======================================================
+
+class SDRAgent(Agent):
     def __init__(self):
-        topic_list = ", ".join([f"{t['id']} ({t['title']})" for t in COURSE_CONTENT])
-
         super().__init__(
             instructions=f"""
-You are a Computer Science Tutor for {COMPANY_NAME}.
+You are **Maya**, a friendly Sales Development Representative (SDR) for **Zoho Projects**, a project management SaaS.
 
-AVAILABLE TOPICS:
-{topic_list}
+💬 Your Job:
+- Greet visitors warmly as they join.
+- Ask what brought them here and what kind of projects or workflows they are managing.
+- Answer questions about Zoho Projects using the FAQ below and the feature details tool.
+- Keep answers short, clear, and tied to project management use cases.
+- Never invent pricing or features beyond what is in the FAQ or feature descriptions.
 
-MODES:
-  - LEARN (Matthew): Explain the concept with a simple example.
-  - QUIZ (Alicia): Ask the sample_question and wait for an answer.
-  - TEACH_BACK (Ken): Ask the user to explain the topic back and then evaluate.
+Lead capture:
+- Naturally ask for:
+  - Name
+  - Company
+  - Email
+  - Role
+  - Use case (what they want to use Zoho Projects for)
+  - Team size
+  - Timeline (now / soon / later)
+- Whenever the user shares any of these details, call the `update_lead_profile` tool with the relevant fields.
+- Do NOT read the JSON structure aloud; just confirm in natural language.
 
-BEHAVIOR:
-  - Start by asking which topic the user wants to study.
-  - Once a topic is selected, allow: learn, quiz, teach_back.
-  - Use the tools select_topic, set_learning_mode, evaluate_teaching.
-  - Keep responses short, friendly, and interactive.
-            """,
-            tools=[select_topic, set_learning_mode, evaluate_teaching],
+Call tools:
+- When the user shares their details (name, email, company, role, use case, team size, timeline), call `update_lead_profile`.
+- When the user asks about a specific feature (e.g. "Tell me about Gantt charts", "How does time tracking work?", "What about task management?"),
+  call `get_feature_details` with the feature name and then read the tool's response in a friendly way.
+- When the user indicates they are done (e.g. says "that's all", "I'm done", "no more questions", "bye", "thank you"), call `submit_lead_and_end`.
+
+End-of-call:
+- After `submit_lead_and_end` responds, briefly summarize who they are and what they are looking for, based on the lead profile you have,
+  and politely close the conversation.
+
+📘 FAQ DATA (use this as your ground truth):
+{STORE_FAQ_TEXT}
+
+Behavior & rules:
+- Be conversational, warm, and professional.
+- Ask one question at a time.
+- Do not overwhelm the user with too many questions in one turn.
+- If information is missing, gently follow up, but do not be pushy.
+- If you don't find something in the FAQ or features, say you are not sure and suggest visiting the Zoho Projects website for more details.
+""",
+            tools=[update_lead_profile, submit_lead_and_end, get_feature_details],
         )
 
 
-# -----------------------------
-# Entrypoint
-# -----------------------------
+# ======================================================
+# 📌 6. ENTRYPOINT (LiveKit Worker)
+# ======================================================
+
 def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
 
 
 async def entrypoint(ctx: JobContext):
-    ctx.log_context_fields = {"room": ctx.room.name}
-    print(f"Starting {COMPANY_NAME} - DSA Tutor Agent")
 
-    userdata = Userdata(tutor_state=TutorState())
+    ctx.log_context_fields = {"room": ctx.room.name}
+    print("\n🔵 Zoho Projects SDR Agent starting...\n")
+
+    userdata = Userdata(lead_profile=LeadProfile())
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
         llm=google.LLM(model="gemini-2.5-flash"),
-        tts=murf.TTS(voice="en-US-matthew", style="Promo", text_pacing=True),
+        tts=murf.TTS(voice="en-US-natalie", style="Promo", text_pacing=True),
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
         userdata=userdata,
     )
 
-    userdata.agent_session = session
-
     await session.start(
-        agent=DSATutorAgent(),
+        agent=SDRAgent(),
         room=ctx.room,
-        room_input_options=RoomInputOptions(noise_cancellation=noise_cancellation.BVC()),
+        room_input_options=RoomInputOptions(
+            noise_cancellation=noise_cancellation.BVC()
+        ),
     )
 
     await ctx.connect()
 
 
+# ======================================================
+# 📌 7. RUN FILE
+# ======================================================
+
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))
+    cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm
+        )
+    )

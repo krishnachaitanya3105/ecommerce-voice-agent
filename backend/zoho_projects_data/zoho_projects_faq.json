@@ -1,0 +1,34 @@
+[
+    {
+        "question": "What is Zoho Projects?",
+        "answer": "Zoho Projects is a cloud-based project management tool that helps teams plan tasks, track progress, collaborate, and manage workflows efficiently."
+    },
+    {
+        "question": "Who is Zoho Projects for?",
+        "answer": "Zoho Projects is ideal for teams in software development, marketing, agencies, operations, and any team that needs to plan and track projects with deadlines."
+    },
+    {
+        "question": "Do you have a free plan?",
+        "answer": "Yes. Zoho Projects offers a free plan with limited projects and users, suitable for small teams who are just getting started."
+    },
+    {
+        "question": "What is your pricing?",
+        "answer": "Zoho Projects has paid plans such as Premium and Enterprise with per-user monthly pricing. Pricing varies based on features and billing cycle, and can be viewed on the Zoho Projects pricing page."
+    },
+    {
+        "question": "Do you offer a free trial?",
+        "answer": "Yes. Zoho Projects offers a free trial period on its paid plans so you can try all features before upgrading."
+    },
+    {
+        "question": "Do you offer mobile apps?",
+        "answer": "Yes. Zoho Projects has mobile apps for iOS and Android so you can manage tasks on the go."
+    },
+    {
+        "question": "Do you support integrations?",
+        "answer": "Yes. Zoho Projects integrates with Zoho apps and third-party tools like Google Workspace, Microsoft Office 365, Slack, GitHub, and more."
+    },
+    {
+        "question": "Do you offer time tracking?",
+        "answer": "Yes. Zoho Projects includes built-in time tracking with timesheets, billable hours, and time reports."
+    }
+]
