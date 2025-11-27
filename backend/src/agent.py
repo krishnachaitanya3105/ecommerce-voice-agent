@@ -1,15 +1,20 @@
+# ======================================================
+# 🏦 DAY 6: BANK FRAUD ALERT AGENT
+# 🛡️ "Bank of Goa" - Fraud Detection & Resolution
+# 🚀 Features: Identity Verification, Database Lookup, Status Updates
+# ======================================================
+
 import logging
-import json
 import os
-import asyncio
+import sqlite3
 from datetime import datetime
 from typing import Annotated, Optional
 from dataclasses import dataclass, asdict
 
-print("\n" + "💼" * 50)
-print("🚀 AI SDR AGENT (PROJECT MANAGEMENT — ZOHO PROJECTS)")
-print("💡 SDR_Agent.py LOADED SUCCESSFULLY!")
-print("💼" * 50 + "\n")
+print("\n" + "🛡️" * 50)
+print("🚀 BANK OF GOA – FRAUD DETECTION & RESOLUTION AGENT INITIALIZED")
+print("📚 TASKS: Verify Identity -> Check Transaction -> Update DB")
+print("🛡️" * 50 + "\n")
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -25,451 +30,275 @@ from livekit.agents import (
     RunContext,
 )
 
-# Plugins
+# 🔌 PLUGINS
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
 load_dotenv(".env.local")
 
-
 # ======================================================
-# 📌 1. DATA PATHS (store data folder outside src/)
-# ======================================================
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DATA_DIR = os.path.join(BACKEND_DIR, "zoho_projects_data")
-FAQ_FILE = "zoho_projects_faq.json"
-LEADS_FILE = "zoho_projects_leads.json"
-
-# ensure data directory exists
-os.makedirs(DATA_DIR, exist_ok=True)
-
-FAQ_PATH = os.path.join(DATA_DIR, FAQ_FILE)
-LEADS_PATH = os.path.join(DATA_DIR, LEADS_FILE)
-
-
-# ======================================================
-# 📌 2. DEFAULT FAQ CONTENT + FEATURE DETAILS
+# 💾 1. DATABASE SETUP (SQLite)
 # ======================================================
 
-DEFAULT_FAQ = [
-    {
-        "question": "What is Zoho Projects?",
-        "answer": (
-            "Zoho Projects is a cloud-based project management tool that helps teams plan tasks, "
-            "track progress, collaborate, and manage workflows efficiently."
-        ),
-    },
-    {
-        "question": "Who is Zoho Projects for?",
-        "answer": (
-            "Zoho Projects is ideal for teams in software development, marketing, agencies, operations, "
-            "and any team that needs to plan and track projects with deadlines."
-        ),
-    },
-    {
-        "question": "Do you have a free plan?",
-        "answer": (
-            "Yes. Zoho Projects offers a free plan with limited projects and users, suitable for small teams "
-            "who are just getting started."
-        ),
-    },
-    {
-        "question": "What is your pricing?",
-        "answer": (
-            "Zoho Projects has paid plans such as Premium and Enterprise with per-user monthly pricing. "
-            "Pricing varies based on features and billing cycle, and can be viewed on the Zoho Projects pricing page."
-        ),
-    },
-    {
-        "question": "Do you offer a free trial?",
-        "answer": "Yes. Zoho Projects offers a free trial period on its paid plans so you can try all features before upgrading.",
-    },
-    {
-        "question": "Do you offer mobile apps?",
-        "answer": "Yes. Zoho Projects has mobile apps for iOS and Android so you can manage tasks on the go.",
-    },
-    {
-        "question": "Do you support integrations?",
-        "answer": (
-            "Yes. Zoho Projects integrates with Zoho apps and third-party tools like Google Workspace, "
-            "Microsoft Office 365, Slack, GitHub, and more."
-        ),
-    },
-    {
-        "question": "Do you offer time tracking?",
-        "answer": (
-            "Yes. Zoho Projects includes built-in time tracking with timesheets, billable hours, and time reports."
-        ),
-    },
-]
-
-# Detailed feature descriptions (used by the new tool)
-FEATURES = {
-    "task management": {
-        "title": "Task Management",
-        "summary": (
-            "Create tasks, assign owners, set priorities and deadlines, and organize work into task lists. "
-            "You can add checklists, attachments, comments, and track status from start to completion."
-        ),
-        "highlights": [
-            "Create and assign tasks to team members",
-            "Set priorities, due dates, and reminders",
-            "Use subtasks and checklists for detailed workflows",
-            "Add comments, files, and links for context",
-        ],
-    },
-    "gantt charts": {
-        "title": "Gantt Charts",
-        "summary": (
-            "Visualize project timelines, dependencies, and milestones with interactive Gantt charts. "
-            "Easily drag and adjust tasks as plans change."
-        ),
-        "highlights": [
-            "View project schedule along a timeline",
-            "Set task dependencies and adjust them visually",
-            "Track milestones and critical paths",
-            "Compare planned vs actual timelines in higher plans",
-        ],
-    },
-    "time tracking": {
-        "title": "Time Tracking & Timesheets",
-        "summary": (
-            "Track how much time is spent on each task or project using timesheets and timers, "
-            "and generate reports for billing or productivity analysis."
-        ),
-        "highlights": [
-            "Start timers directly on tasks",
-            "Log hours manually into timesheets",
-            "Separate billable and non-billable hours",
-            "Export time data for clients or payroll",
-        ],
-    },
-    "collaboration": {
-        "title": "Team Collaboration",
-        "summary": (
-            "Keep all project communication in one place with comments, feeds, chat, forums, and file sharing."
-        ),
-        "highlights": [
-            "Comment directly on tasks and issues",
-            "Use project feeds to see recent updates",
-            "Create project forums for discussions",
-            "Upload and share files with version history",
-        ],
-    },
-    "automation": {
-        "title": "Automation & Blueprints",
-        "summary": (
-            "Automate repetitive steps in your workflows using Blueprints, custom rules, and notifications."
-        ),
-        "highlights": [
-            "Define step-by-step workflows for tasks",
-            "Trigger actions when tasks move between stages",
-            "Send automated reminders and notifications",
-            "Reduce manual work and enforce processes",
-        ],
-    },
-    "integrations": {
-        "title": "Integrations",
-        "summary": (
-            "Connect Zoho Projects with other tools you already use, including Zoho apps and third-party services."
-        ),
-        "highlights": [
-            "Integrate with Zoho CRM, Zoho Books, Zoho Sprints, and more",
-            "Connect with Google Workspace and Microsoft Office 365",
-            "Use Slack, GitHub, Bitbucket integrations",
-            "Automate workflows further using integration platforms",
-        ],
-    },
-    "reports": {
-        "title": "Reports & Dashboards",
-        "summary": (
-            "Get visibility into project progress, resource utilization, and time spent with built-in reports and dashboards."
-        ),
-        "highlights": [
-            "Track project status with visual dashboards",
-            "View workload and utilization reports",
-            "Analyze timesheet data and task metrics",
-            "Export reports for stakeholders or clients",
-        ],
-    },
-    "mobile apps": {
-        "title": "Mobile Apps",
-        "summary": (
-            "Manage projects from anywhere with Zoho Projects mobile apps on iOS and Android."
-        ),
-        "highlights": [
-            "Create and update tasks on the go",
-            "Track time from your phone",
-            "Get push notifications for important updates",
-            "Collaborate with your team remotely",
-        ],
-    },
-}
-
-
-def load_faq():
-    """Create FAQ file if missing, then load it."""
-    try:
-        if not os.path.exists(FAQ_PATH):
-            with open(FAQ_PATH, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_FAQ, f, indent=4)
-
-        with open(FAQ_PATH, "r", encoding="utf-8") as f:
-            return json.dumps(json.load(f))
-    except Exception as e:
-        print("⚠️ FAQ Load Error:", e)
-        return ""
-
-
-STORE_FAQ_TEXT = load_faq()
-
-
-# ======================================================
-# 📌 3. LEAD DATA STRUCTURE
-# ======================================================
+BASE_DIR = os.path.dirname(__file__)
+DB_PATH = os.path.join(BASE_DIR, "fraud.db")
 
 @dataclass
-class LeadProfile:
-    name: Optional[str] = None
-    company: Optional[str] = None
-    email: Optional[str] = None
-    role: Optional[str] = None
-    use_case: Optional[str] = None
-    team_size: Optional[str] = None
-    timeline: Optional[str] = None
+class FraudCase:
+    userName: str
+    securityIdentifier: str
+    cardEnding: str
+    transactionName: str
+    transactionAmount: str
+    transactionTime: str
+    transactionSource: str
+    case_status: str = "pending_review"  # pending_review, confirmed_safe, confirmed_fraud
+    notes: str = ""
 
-    def is_qualified(self):
-        # Simple qualification rule: at least name, email, and use case
-        return all([self.name, self.email, self.use_case])
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fraud_cases (
+        userName TEXT PRIMARY KEY,
+        securityIdentifier TEXT,
+        cardEnding TEXT,
+        transactionName TEXT,
+        transactionAmount TEXT,
+        transactionTime TEXT,
+        transactionSource TEXT,
+        case_status TEXT,
+        notes TEXT
+    )
+    """)
+    conn.commit()
+    conn.close()
 
+def seed_database():
+    """
+    Seed the database only if it is empty.
+    IMPORTANT: seed records are inserted with 'pending_review' so the agent must ask user first.
+    """
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM fraud_cases")
+    count = cursor.fetchone()[0]
+
+    if count == 0:
+        sample_data = [
+            # Seeded as pending_review so the agent must verify with customer
+            ("Jade", "99112", "5621", "Flipkart Electronics", "₹18,499", "2025-11-26 14:20 IST", "flipkart.com", "pending_review", ""),
+            ("Shane", "77221", "9934", "Myntra Fashion", "₹5,299", "2025-11-26 08:10 IST", "myntra.com", "pending_review", ""),
+            ]
+
+        cursor.executemany("""
+        INSERT INTO fraud_cases (userName, securityIdentifier, cardEnding, transactionName, transactionAmount, transactionTime, transactionSource, case_status, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, sample_data)
+
+        conn.commit()
+        print(f"✅ SQLite DB seeded at {DB_PATH}")
+
+    conn.close()
+
+# Initialize DB on load
+seed_database()
+
+# ======================================================
+# 🧠 2. STATE MANAGEMENT
+# ======================================================
 
 @dataclass
 class Userdata:
-    lead_profile: LeadProfile
-
+    # Holds the specific case currently being discussed
+    active_case: Optional[FraudCase] = None
 
 # ======================================================
-# 📌 4. LEAD CAPTURE TOOLS
+# 🛠️ 3. FRAUD AGENT TOOLS (SQLite-backed)
 # ======================================================
 
 @function_tool
-async def update_lead_profile(
+async def lookup_customer(
     ctx: RunContext[Userdata],
-    name: Annotated[Optional[str], Field(description="Customer name")] = None,
-    company: Annotated[Optional[str], Field(description="Company name")] = None,
-    email: Annotated[Optional[str], Field(description="Email address")] = None,
-    role: Annotated[Optional[str], Field(description="Job role")] = None,
-    use_case: Annotated[Optional[str], Field(description="User goal / use case for Zoho Projects")] = None,
-    team_size: Annotated[Optional[str], Field(description="Team size using Zoho Projects")] = None,
-    timeline: Annotated[Optional[str], Field(description="Timeline to start (now / soon / later)")] = None,
+    name: Annotated[str, Field(description="The first name the user provides")]
 ) -> str:
+    """
+    🔍 Looks up a customer in the SQLite DB by name.
+    Call this immediately when the user says their name.
+    """
+    print(f"🔎 LOOKING UP: {name}")
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-    profile = ctx.userdata.lead_profile
+    cursor.execute("""
+        SELECT userName, securityIdentifier, cardEnding, transactionName, transactionAmount, transactionTime, transactionSource, case_status, notes
+        FROM fraud_cases
+        WHERE LOWER(userName) = LOWER(?)
+    """, (name,))
+    row = cursor.fetchone()
+    conn.close()
 
-    # Update only the fields provided
-    if name:
-        profile.name = name.strip()
-    if company:
-        profile.company = company.strip()
-    if email:
-        profile.email = email.strip()
-    if role:
-        profile.role = role.strip()
-    if use_case:
-        profile.use_case = use_case.strip()
-    if team_size:
-        profile.team_size = team_size.strip()
-    if timeline:
-        profile.timeline = timeline.strip()
+    if not row:
+        return "User not found in the fraud database. Ask them to repeat the name or offer to add them as a new case."
 
-    print("📝 LEAD UPDATED:", profile)
-    # Helpful return so the agent can speak a confirmation
-    confirmations = []
-    if name:
-        confirmations.append(f"name = {profile.name}")
-    if email:
-        confirmations.append(f"email = {profile.email}")
-    if role:
-        confirmations.append(f"role = {profile.role}")
-    if company and profile.company:
-        confirmations.append(f"company = {profile.company}")
-    if use_case:
-        confirmations.append(f"use_case = {profile.use_case}")
-    if team_size:
-        confirmations.append(f"team_size = {profile.team_size}")
-    if timeline:
-        confirmations.append(f"timeline = {profile.timeline}")
+    # Build FraudCase from row (matching dataclass order)
+    case = FraudCase(*row)
+    ctx.userdata.active_case = case
 
-    if confirmations:
-        return "Got it — " + ", ".join(confirmations) + "."
+    return (
+        f"Record Found.\n"
+        f"User: {case.userName}\n"
+        f"Security ID (Expected): {case.securityIdentifier}\n"
+        f"Transaction Details: {case.transactionAmount} at {case.transactionName} ({case.transactionSource})\n"
+        f"Status: {case.case_status}\n"
+        f"Instructions: Ask the user for their 'Security Identifier' to verify identity before discussing the transaction."
+    )
+
+@function_tool
+async def resolve_fraud_case(
+    ctx: RunContext[Userdata],
+    status: Annotated[str, Field(description="The final status: 'confirmed_safe' or 'confirmed_fraud'")],
+    notes: Annotated[str, Field(description="A brief summary of the user's response")]
+) -> str:
+    """
+    💾 Saves the result of the investigation to the SQLite DB.
+    Call this after the user confirms or denies the transaction.
+    """
+    if not ctx.userdata.active_case:
+        return "Error: No active case selected."
+
+    # Update local object
+    case = ctx.userdata.active_case
+    case.case_status = status
+    case.notes = notes
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE fraud_cases
+        SET case_status = ?, notes = ?
+        WHERE userName = ?
+    """, (case.case_status, case.notes, case.userName))
+
+    conn.commit()
+    conn.close()
+
+    print(f"✅ CASE UPDATED: {case.userName} -> {status}")
+
+    if status == "confirmed_fraud":
+        return f"Case updated as FRAUD. Inform the user: Card ending in {case.cardEnding} is now blocked. A new card will be mailed."
     else:
-        return "Got it. Thanks!"
-
-
-@function_tool
-async def submit_lead_and_end(ctx: RunContext[Userdata]) -> str:
-    """Save to JSON file (no extra dependencies)."""
-
-    profile = ctx.userdata.lead_profile
-
-    entry = asdict(profile)
-    entry["timestamp"] = datetime.now().isoformat()
-
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(LEADS_PATH), exist_ok=True)
-
-    leads = []
-    if os.path.exists(LEADS_PATH):
-        try:
-            with open(LEADS_PATH, "r", encoding="utf-8") as f:
-                leads = json.load(f)
-        except Exception as e:
-            print("⚠️ Error loading existing leads:", e)
-            leads = []
-
-    # If company is missing we just keep it as None or empty; no special handling needed
-    if not entry.get("company"):
-        entry["company"] = entry.get("company")  # keep None or empty
-
-    # Append and save
-    leads.append(entry)
-
-    try:
-        with open(LEADS_PATH, "w", encoding="utf-8") as f:
-            json.dump(leads, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print("⚠️ Error saving lead file:", e)
-        return "Sorry, there was an error saving your details. Please try again."
-
-    print(f"✅ LEAD SAVED → {LEADS_PATH}")
-
-    # Friendly spoken confirmation
-    friendly_name = profile.name if profile.name else "there"
-    email_note = f" We'll email more details to {profile.email}." if profile.email else ""
-    return (
-        f"Thanks {friendly_name}! Your details have been saved.{email_note} Have a great day!"
-    )
-
-
-# ======================================================
-# 📌 4b. FEATURE DETAILS TOOL
-# ======================================================
+        return f"Case updated as SAFE. Inform the user: The restriction has been lifted. Thank you for verifying."
 
 @function_tool
-async def get_feature_details(
+async def add_customer(
     ctx: RunContext[Userdata],
-    feature_name: Annotated[str, Field(description="Feature name to fetch details for, e.g., 'Task Management', 'Gantt Charts', 'Time Tracking'")],
+    userName: Annotated[str, Field(description="Customer first name")],
+    securityIdentifier: Annotated[str, Field(description="Security ID")],
+    cardEnding: Annotated[str, Field(description="Last 4 digits of card")],
+    transactionName: Annotated[str, Field(description="Merchant name")],
+    transactionAmount: Annotated[str, Field(description="Amount as string")],
+    transactionTime: Annotated[str, Field(description="Transaction time string")],
+    transactionSource: Annotated[str, Field(description="Merchant domain or source")],
 ) -> str:
-    """Return a summary and highlights for a requested feature if available."""
-    key = feature_name.strip().lower()
-
-    # Try exact key match first
-    if key in FEATURES:
-        f = FEATURES[key]
-        highlights_text = "\n  - ".join(f["highlights"]) if f.get("highlights") else ""
-        return (
-            f"{f['title']}.\n"
-            f"Summary: {f.get('summary')}\n"
-            f"Key points:\n  - {highlights_text}"
-        )
-
-    # Fuzzy match based on title containing the query
-    for k, f in FEATURES.items():
-        if feature_name.strip().lower() in f["title"].lower():
-            highlights_text = "\n  - ".join(f["highlights"]) if f.get("highlights") else ""
-            return (
-                f"{f['title']}.\n"
-                f"Summary: {f.get('summary')}\n"
-                f"Key points:\n  - {highlights_text}"
-            )
-
-    # not found
-    return (
-        "Sorry — I couldn't find details for that feature. "
-        "You can ask about: Task Management, Gantt Charts, Time Tracking, Collaboration, Automation, Integrations, Reports, or Mobile Apps."
-    )
-
+    """
+    ➕ Adds a new customer record to the SQLite DB.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO fraud_cases (userName, securityIdentifier, cardEnding, transactionName, transactionAmount, transactionTime, transactionSource, case_status, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (userName, securityIdentifier, cardEnding, transactionName, transactionAmount, transactionTime, transactionSource, "pending_review", ""))
+        conn.commit()
+        return f"Customer {userName} added to database with status pending_review."
+    except sqlite3.IntegrityError:
+        return f"Error: A customer with the name '{userName}' already exists."
+    except Exception as e:
+        return f"DB error: {e}"
+    finally:
+        conn.close()
 
 # ======================================================
-# 📌 5. SDR AGENT (Maya)
+# 🤖 4. AGENT DEFINITION (Bank of Goa)
 # ======================================================
 
-class SDRAgent(Agent):
+class FraudAgent(Agent):
     def __init__(self):
         super().__init__(
-            instructions=f"""
-You are **Maya**, a friendly Sales Development Representative (SDR) for **Zoho Projects**, a project management SaaS.
+            instructions="""
+            You are 'Alex', a Fraud Detection Specialist at Bank of Goa. 
+            Your job is to verify a suspicious transaction with the customer efficiently and professionally.
 
-💬 Your Job:
-- Greet visitors warmly as they join.
-- Ask what brought them here and what kind of projects or workflows they are managing.
-- Answer questions about Zoho Projects using the FAQ below and the feature details tool.
-- Keep answers short, clear, and tied to project management use cases.
-- Never invent pricing or features beyond what is in the FAQ or feature descriptions.
+            🛡️ **SECURITY PROTOCOL (FOLLOW STRICTLY):**
+            
+            1. **GREETING & ID:** - State that you are calling about a "security alert".
+               - Ask: "Am I speaking with the account holder? May I have your first name?"
+            
+            2. **LOOKUP:**
+               - Use tool `lookup_customer` immediately when you hear the name.
+            
+            3. **VERIFICATION:**
+               - Once the record is loaded, ask for their **Security Identifier**.
+               - Compare their answer to the data returned by the tool.
+               - IF WRONG: Politely apologize and disconnect (pretend to end call).
+               - IF CORRECT: Proceed.
+            
+            4. **TRANSACTION REVIEW:**
+               - Read the transaction details clearly: "We flagged a charge of [Amount] at [Merchant] on [Time]."
+               - Ask: "Did you make this transaction?"
+            
+            5. **RESOLUTION:**
+               - **If User Says YES (Legit):** Use tool `resolve_fraud_case(status='confirmed_safe', notes='User confirmed transaction')`.
+               - **If User Says NO (Fraud):** Use tool `resolve_fraud_case(status='confirmed_fraud', notes='User denied the transaction')`.
+            
+            6. **CLOSING:**
+               - Confirm the action taken (Card blocked OR Unblocked).
+               - Say goodbye professionally.
 
-Lead capture:
-- Naturally ask for:
-  - Name
-  - Company
-  - Email
-  - Role
-  - Use case (what they want to use Zoho Projects for)
-  - Team size
-  - Timeline (now / soon / later)
-- Whenever the user shares any of these details, call the `update_lead_profile` tool with the relevant fields.
-- Do NOT read the JSON structure aloud; just confirm in natural language.
-
-Call tools:
-- When the user shares their details (name, email, company, role, use case, team size, timeline), call `update_lead_profile`.
-- When the user asks about a specific feature (e.g. "Tell me about Gantt charts", "How does time tracking work?", "What about task management?"),
-  call `get_feature_details` with the feature name and then read the tool's response in a friendly way.
-- When the user indicates they are done (e.g. says "that's all", "I'm done", "no more questions", "bye", "thank you"), call `submit_lead_and_end`.
-
-End-of-call:
-- After `submit_lead_and_end` responds, briefly summarize who they are and what they are looking for, based on the lead profile you have,
-  and politely close the conversation.
-
-📘 FAQ DATA (use this as your ground truth):
-{STORE_FAQ_TEXT}
-
-Behavior & rules:
-- Be conversational, warm, and professional.
-- Ask one question at a time.
-- Do not overwhelm the user with too many questions in one turn.
-- If information is missing, gently follow up, but do not be pushy.
-- If you don't find something in the FAQ or features, say you are not sure and suggest visiting the Zoho Projects website for more details.
-""",
-            tools=[update_lead_profile, submit_lead_and_end, get_feature_details],
+            ⚠️ **TONE:** Calm, authoritative, reassuring. Do NOT ask for full card numbers or passwords.
+            """,
+            tools=[lookup_customer, resolve_fraud_case, add_customer],
         )
 
-
 # ======================================================
-# 📌 6. ENTRYPOINT (LiveKit Worker)
+# 🎬 ENTRYPOINT
 # ======================================================
 
 def prewarm(proc: JobProcess):
+    # load VAD model once for worker
     proc.userdata["vad"] = silero.VAD.load()
 
-
 async def entrypoint(ctx: JobContext):
-
     ctx.log_context_fields = {"room": ctx.room.name}
-    print("\n🔵 Zoho Projects SDR Agent starting...\n")
 
-    userdata = Userdata(lead_profile=LeadProfile())
+    print("\n" + "💼" * 25)
+    print("🚀 STARTING FRAUD ALERT SESSION")
+    
+    # 1. Initialize State
+    userdata = Userdata()
 
+    # 2. Setup Agent session
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
-        llm=google.LLM(model="gemini-2.5-flash"),
-        tts=murf.TTS(voice="en-US-natalie", style="Promo", text_pacing=True),
+        llm=google.LLM(model="gemini-2.5-flash"),  # ensure access to this model or replace if needed
+        tts=murf.TTS(
+            voice="en-US-marcus",
+            style="Conversational",
+            text_pacing=True,
+        ),
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
         userdata=userdata,
     )
-
+    
+    # 3. Start
     await session.start(
-        agent=SDRAgent(),
+        agent=FraudAgent(),
         room=ctx.room,
         room_input_options=RoomInputOptions(
             noise_cancellation=noise_cancellation.BVC()
@@ -478,15 +307,5 @@ async def entrypoint(ctx: JobContext):
 
     await ctx.connect()
 
-
-# ======================================================
-# 📌 7. RUN FILE
-# ======================================================
-
 if __name__ == "__main__":
-    cli.run_app(
-        WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            prewarm_fnc=prewarm
-        )
-    )
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))
