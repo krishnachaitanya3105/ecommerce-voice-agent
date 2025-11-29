@@ -1,204 +1,180 @@
-# Day 6 – Fraud Alert Voice Agent
+# Day 8 – Voice Game Master (D&D-Style Adventure)
 
-## Overview
+Welcome to Day 8!  
+Today you’ll turn your voice agent into a **D&D-style Game Master** that runs a story in a specific universe (maybe in the setting of your favorite TV show/ movie) and guides the player through an interactive adventure.
 
-Build a **fraud alert voice agent** for your favorite bank.
-
-For the **primary goal**, everything can run using your existing frontend voice setup (without telephony) :
-
-- You will create a **sample database** describing for a few suspicious transaction. 
-
-```json
-{
-  "userName" : "John",
-  "securityIdentifier" : "12345",
-  "cardEnding": "4242",
-  "case": "safe/fraudulent",
-  "transactionName" : "ABC Industry",
-  "transactionTime" : "",
-  "transactionCategory" : "e-commerce",
-  "transactionSource" : "alibaba.com"
-}
-
-```
-- When a “fraud alert” call/session starts, your agent will **use userName from the database** and:
-  - Introduce itself as the bank’s fraud department.
-  - Verify the customer in a basic, safe way.
-  - Read out the suspicious transaction.
-  - Ask if it was actually made by the customer.
-  - Mark the case as **safe** or **fraudulent**.
-- If you persist anything, you’ll do it by **writing to database entry**.
-
-For the **advanced goals**, the main challenge is:
-
-- Implement the same fraud flow using **actual telephony with LiveKit Telephony**, so someone can talk to the fraud bot from a real phone call.
-
-You can add more advanced behavior on top if you like (multiple fraud cases, DTMF input, JSON-based “fraud ops” records, etc.).
-
-> ⚠️ **Important:**  
-> Use only **fake data**.  
-> Do **not** request or handle real card numbers, PINs, passwords, or other sensitive information.  
-> Keep everything clearly demo/sandbox-only.
+You’ll start with a **simple, single-player story** that only relies on the conversation history, and then (if you want) level up into a **stateful RPG engine** powered by a JSON world model.
 
 ---
 
-## What You’ll Work With
+## Scenario
 
-You will typically have:
+You are building a **voice-only game master**:
 
-- One or more **Database entries**:
-  - Input: fraud case(s) to investigate.
-  - Output (optional): updated fraud case(s) or a log file reflecting results.
-- Logging (e.g. terminal logs) to help you see what’s happening.
-
-There is **no UI requirement** for this task.  
-Anything you want to persist should be stored in database.
+The **system message** for the LLM will define the universe, tone, and rules.  
+For example: “You are a Game Master running a fantasy adventure in a world of dragons and magic,” or “You are running a sci-fi survival story on Mars,” etc.
 
 ---
 
-## Primary Goal (MVP) – Single Fraud Case from Database, In-App Call
+## Primary Goal (Required)
 
-**Objective:**  
-Build a voice agent that, when a fraud alert call starts, reads a **single fraud case** from a Database, talks the user through the details, asks if the transaction is legitimate, and updates the case status in Database to safe or fraudulent.
+> **Build a D&D-style voice Game Master that runs a story in a single universe, using only chat history for context.**
 
-### Tasks
+### Minimum Requirements
 
-1. **Create a sample fraud cases in Database**
+Your agent should:
 
-   - Create few entries that represents **one suspicious transaction**.
-   - Include at least:
-     - Customer name (fake).
-     - Security Identifier (fake)
-     - Masked card number (e.g. `**** 1234`).
-     - Transaction amount (fake).
-     - Merchant name (fake).
-     - Location (fake).
-     - Timestamp (fake).
-     - A simple security question and answer (for basic verification; fake).
-     - Current status (e.g. `pending_review`).
-   - Use these entries to load the fraud case at call start with username.
-   - 
-2. **Set up the fraud agent persona**
+1. **Use a clear Game Master (GM) persona**
 
-   - Make the agent behave like a **fraud detection representative** for a fictional bank.
-   - It should:
-     - Clearly introduce the bank and itself at the start of the call/session.
-     - Explain that it is contacting the user about a suspicious transaction.
-     - Use calm, professional, reassuring language.
-   - It must **not** ask for full card numbers, PINs, or credentials. Any identity confirmation should come from non-sensitive fields in your database (e.g. a basic security question).
+   - System prompt sets:
+     - Universe (fantasy / sci-fi / post-apocalypse / etc.)
+     - Tone (dramatic, humorous, spooky)
+     - Role: “You are the GM. You describe scenes and ask the player what they do.”
 
-3. **Load the fraud case at call start**
+2. **Drive an interactive story using voice**
 
-   - When the fraud call/session begins:
-     - Load the fraud case from your database after asking for username.
-     - Keep this case in your scenario’s state for the duration of the call.
-     - The agent should use this data to describe:
-       - The merchant,
-       - The amount,
-       - The masked card,
-       - The approximate time and location.
+   - GM describes the current scene.
+   - GM ends each message with a **prompt for player action** (“What do you do?”).
+   - Player responds by speaking; the agent continues the story based on that.
 
-4. **Implement a simple call flow**
+3. **Maintain continuity with chat history**
 
-   Design a clear, minimal sequence:
+   - The GM should remember:
+     - Player’s past decisions
+     - Named characters / locations
 
-   - Greet the user and explain why the bank is calling.
-   - Ask a **basic verification question** (using data), such as:
-     - A security question stored in the database, or
-     - Confirming a non-sensitive detail.
-   - If verification passes:
-     - Read out the suspicious transaction details from the database entry.
-     - Ask the user if they made this transaction (yes/no).
-   - If verification fails:
-     - Politely say that you cannot proceed and end the call.
-   - Based on the yes/no answer:
-     - If the user **confirms** the transaction → mark it as safe.
-     - If the user **denies** the transaction → mark it as fraudulent and describe the action (e.g. card blocked, dispute raised — all mock).
-   - End the call with a short confirmation of what action was taken.
+4. **Run a short “session”**
 
-5. **Update the fraud case in database**
+   - A single playthrough should:
+     - Last at least a few turns (e.g., 8–15 exchanges).
+     - Reach some kind of “mini-arc” (finding something, escaping danger, etc.).
 
-   - After the call logic completes:
-     - Update the fraud case data in database:
-       - Set status to something like `confirmed_safe`, `confirmed_fraud`, or `verification_failed`.
-       - Add a short outcome note (e.g. “Customer confirmed transaction as legitimate.”).
-     - Write the updated fraud case back to **the database**:
-       - You can overwrite the original entry.
-   - Optionally log the final status and note in the console for easier debugging.
+5. **Basic UI**
+   - Show the GM’s text messages.
+   - Show the player’s transcribed speech.
+   - Optional but nice: a “Restart story” button to start a fresh adventure.
 
-### MVP Completion Checklist
-
-You’ve finished the **primary goal** if:
-
-- You created a database entry describing one fake fraud case.
-- When the call/session starts, the agent:
-  - Loads this database entry,
-  - Uses it to drive the conversation.
-- The agent:
-  - Introduces itself as a bank fraud rep,
-  - Performs simple, safe verification,
-  - Reads out the suspicious transaction,
-  - Asks if the user made it,
-  - Chooses the appropriate branch.
-- At the end, the fraud case’s status and a short outcome summary are written back to database.
+If you achieve this, you’ve completed the **Day 8 primary goal**
 
 #### Resources
 - https://docs.livekit.io/agents/build/prompting/
 - https://docs.livekit.io/agents/build/tools/
-- https://www.geeksforgeeks.org/python/python-sqlite/
-- https://www.mongodb.com/resources/languages/python
+---
+
+## Advanced Goals
+
+Pick any **one or more** of these to go beyond a simple GM.  
+These will make your agent feel more like a real game engine than just a chat.
 
 ---
 
-## Advanced Goals (Optional, Higher Impact)
+### 1. JSON World State: Characters, Events, and World Info
 
-The main advanced goal for Day 6 is to implement this as **real telephony** using **LiveKit Telephony**, so that a real phone call can drive the same fraud-case reading and updating.
+> **Goal:** Maintain a structured JSON “world state” that the GM updates and uses to guide the story.
 
-You can add other enhancements on top.
+Instead of relying only on past messages, introduce a **Python-side data structure** (in memory is fine) that tracks things like:
+
+- `characters`
+  - Player character (name, class, HP, inventory, traits)
+  - Important NPCs (name, role, attitude towards player)
+- `locations`
+  - Current location name, description, known paths
+- `events`
+  - Key events that have happened (met NPC X, completed quest Y, angered faction Z)
+- `quests`
+  - Active / completed objectives
+
+The GM should:
+
+1. **Update this JSON state** after each turn (or when something important happens).
+2. **Consult this state** when deciding what happens next.
+   - Example: If an NPC is dead in the JSON, they shouldn’t suddenly reappear alive.
+3. Keep it in a place where you can **inspect it easily** (e.g., log to console or show in UI).
+
+You do _not_ need a database; in-memory JSON per session is enough.
 
 ---
 
-### Advanced Goal – Live Telephony with LiveKit Telephony
+### 2. Player Character Sheet & Inventory
 
-**Objective:**  
-Run your fraud alert agent over a **real phone call** via [LiveKit Telephony](https://docs.livekit.io/agents/start/telephony/), with fraud cases loaded from database and results persisted back to database.
+> **Goal:** Track player stats and items in the JSON state and expose them to the player.
 
-**Tasks:**
+Build on the world state by adding a **character sheet**:
 
-- Integrate **LiveKit Telephony** with your app:
-  - Configure a phone number or telephony entry point.
-  - Route incoming or outgoing calls into your Day 6 fraud scenario.
-- Ensure that when a call starts:
-  - A fraud case is loaded from your database entry using username.
-  - The same call flow from the primary goal is used:
-    - Introduction,
-    - Basic verification,
-    - Suspicious transaction explanation,
-    - Yes/no confirmation,
-    - Status update.
-- When the call ends:
-  - Update the fraud case status and outcome in memory.
-  - Persist the changes by writing them back to database.
-- Use logs to confirm:
-  - Which fraud case was used,
-  - What decision was made,
-  - What the final status in the database is
+- HP / health or a simple “status” (Healthy / Injured / Critical)
+- Some attributes (e.g., Strength / Intelligence / Luck) – can just be numbers or tags
+- Inventory: list of items with optional properties (e.g., “magic sword”, “health potion”)
 
-After this, you should be able to:
+The GM should:
 
-- Make/receive a call,
-- Talk to the fraud bot by phone,
-- See the updated database reflecting the outcome of the call.
+- Update inventory when:
+  - Player picks up / loses items
+- Use stats to:
+  - Adjust outcomes (e.g., “you’re strong, so you succeed more easily”)
+- Be able to **answer questions** like:
+  - “What do I have in my bag?”
+  - “How much health do I have left?”
 
-### Resources
-- https://docs.livekit.io/agents/start/telephony/
-- https://docs.livekit.io/sip/cloud/phone-numbers/
-- https://docs.livekit.io/sip/quickstarts/configuring-plivo-trunk/
+Frontend bonus: show a simple **Character panel** that reflects this JSON.
+
+---
+
+### 3. Simple Mechanics: Checks and Dice Rolls
+
+> **Goal:** Add light game mechanics that make decisions more interesting than pure storytelling.
+
+Ideas:
+
+- Add `diceRoll` logic in Python (e.g., random number 1–20).
+- When the player attempts something risky:
+  - Perform a roll + apply modifiers from attributes.
+  - Decide outcome tier: Fail / Partial success / Full success.
+- Let the GM describe the outcome accordingly.
+
+You can either:
+
+- Keep dice purely backend and let GM describe results, **or**
+- Show the dice roll in the UI (e.g., “Roll: 14 (Success)”).
+
+---
+
+### 4. Multiple Universes via System Message Presets
+
+> **Goal:** Let the player choose the universe and swap the GM’s behavior accordingly.
+
+At the start of the game (or from a settings panel):
+
+- Let user pick from a few **preset universes**:
+  - “Classic fantasy”
+  - “Cyberpunk city”
+  - “Space opera”
+- Each universe:
+  - Uses a different system prompt.
+  - Optionally initializes a different **baseline JSON world template**.
+
+
+---
+
+### 5. Save & Resume Game
+
+> **Goal:** Allow exporting and re-importing the JSON world state so a game can be resumed later.\*\*
+
+This is primarily an engineering challenge, not an LLM one:
+
+- Add a “Save Game” button:
+  - Serializes the JSON world state and (optionally) last few messages.
+  - Maybe just download as a `.json` file or keep it in localStorage.
+- Add a “Load Game” button:
+  - Restores that JSON into memory.
+  - Tells the GM what happened so far (through a short summary or direct JSON).
+
+Even a very rough implementation here is impressive.
+
 -----
 
-- Step 1: You only need the **primary goal** to complete Day 6; the **Advanced Goals** are for going the extra mile.
-- Step 2: **Successfully connect to Fraud Alert Voice Agent** in your browser and go through fraud verification scenarios of `confirmed_safe`, `confirmed_fraud`, and `verification_failed`.
-- Step 3: **Record a short video** of your session with the agent and show the updated database on verification process.
-- Step 4: **Post the video on LinkedIn** with a description of what you did for the task on Day 6. Also, mention that you are building voice agent using the fastest TTS API - Murf Falcon. Mention that you are part of the **“Murf AI Voice Agent Challenge”** and don't forget to tag the official Murf AI handle. Also, use hashtags **#MurfAIVoiceAgentsChallenge** and **#10DaysofAIVoiceAgents**
+- Step 1: You only need the **primary goal** to complete Day 8; the **Advanced Goals** are for going the extra mile.
+- Step 2: **Successfully connect to Voice Game Master (D&D-Style Adventure)** in your browser and talk through game scenario.
+- Step 3: **Record a short video** of your session with the agent.
+- Step 4: **Post the video on LinkedIn** with a description of what you did for the task on Day 8. Also, mention that you are building voice agent using the fastest TTS API - Murf Falcon. Mention that you are part of the **“Murf AI Voice Agent Challenge”** and don't forget to tag the official Murf AI handle. Also, use hashtags **#MurfAIVoiceAgentsChallenge** and **#10DaysofAIVoiceAgents**
 
-Once your agent is running and your LinkedIn post is live, you’ve completed Day 6.
+Once your agent is running and your LinkedIn post is live, you’ve completed Day 8.
