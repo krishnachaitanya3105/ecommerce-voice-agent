@@ -1,180 +1,310 @@
-# Day 8 – Voice Game Master (D&D-Style Adventure)
+# Day 9 – E-commerce Agent (Based on the Agentic Commerce Protocol)
 
-Welcome to Day 8!  
-Today you’ll turn your voice agent into a **D&D-style Game Master** that runs a story in a specific universe (maybe in the setting of your favorite TV show/ movie) and guides the player through an interactive adventure.
+Today you will build a **voice-driven shopping assistant** that follows a very lite version of the [Agentic Commerce Protocol (ACP)](https://www.agenticcommerce.dev/).
 
-You’ll start with a **simple, single-player story** that only relies on the conversation history, and then (if you want) level up into a **stateful RPG engine** powered by a JSON world model.
+The idea is to simulate the key ACP pattern:
+
+- The **user** describes what they want to buy.
+- The **AI agent** interprets that intent.
+- The agent calls a **merchant-like API** (your Python code) to:
+  - Browse a product catalog.
+  - Create an order.
+
+No real payments, authentication, or full spec are required for this day.
 
 ---
 
-## Scenario
+## ACP: Very Short Primer (Conceptual)
 
-You are building a **voice-only game master**:
+The Agentic Commerce Protocol (ACP) is an open standard that defines how:
 
-The **system message** for the LLM will define the universe, tone, and rules.  
-For example: “You are a Game Master running a fantasy adventure in a world of dragons and magic,” or “You are running a sci-fi survival story on Mars,” etc.
+- **Buyers and their AI agents** express shopping intent,
+- **Merchants** expose their products and create orders,
+- **Payment providers** process the payment securely,
+
+using a structured, JSON-based interface and HTTP APIs.
+
+Key ideas you should borrow for this task:
+
+- Keep a **clear separation** between:
+  - Conversation (LLM + voice),
+  - Commerce logic (functions/endpoints that manage catalog and orders).
+- Use **structured objects** for:
+  - Product catalog items,
+  - Orders (what was bought, quantity, price, currency).
+
+You are not implementing the full ACP spec.  
+You are just building a small, ACP-inspired flow in your own code.
 
 ---
 
 ## Primary Goal (Required)
 
-> **Build a D&D-style voice Game Master that runs a story in a single universe, using only chat history for context.**
+Build a **voice shopping assistant** with:
 
-### Minimum Requirements
+1. A small product catalog.
+2. A simple, ACP-inspired “merchant layer” in Python.
+3. A voice flow that lets the user browse and place an order.
+4. Orders persisted on the backend (in memory or JSON file).
+
+### Behaviour Requirements
 
 Your agent should:
 
-1. **Use a clear Game Master (GM) persona**
+1. Let the user explore the catalog by voice
 
-   - System prompt sets:
-     - Universe (fantasy / sci-fi / post-apocalypse / etc.)
-     - Tone (dramatic, humorous, spooky)
-     - Role: “You are the GM. You describe scenes and ask the player what they do.”
+   Examples (not hard-coded phrases):
 
-2. **Drive an interactive story using voice**
+   - “Show me all coffee mugs.”
+   - “Do you have any t-shirts under 1000?”
+   - “I’m looking for a black hoodie.”
+   - "Does this coffee mug come in blue?"
 
-   - GM describes the current scene.
-   - GM ends each message with a **prompt for player action** (“What do you do?”).
-   - Player responds by speaking; the agent continues the story based on that.
+   The agent should:
 
-3. **Maintain continuity with chat history**
+   - Call a Python function to get the catalog or filtered list.
+   - Summarize a few relevant products with name and price.
 
-   - The GM should remember:
-     - Player’s past decisions
-     - Named characters / locations
+2. Allow the user to place an order
 
-4. **Run a short “session”**
+   Example flow:
 
-   - A single playthrough should:
-     - Last at least a few turns (e.g., 8–15 exchanges).
-     - Reach some kind of “mini-arc” (finding something, escaping danger, etc.).
+   - User: “I’ll buy the second hoodie you mentioned, in size M.”
+   - Agent:
+     - Resolves which product this refers to.
+     - Calls a Python function to create an order object.
+     - Confirms the order details back to the user.
 
-5. **Basic UI**
-   - Show the GM’s text messages.
-   - Show the player’s transcribed speech.
-   - Optional but nice: a “Restart story” button to start a fresh adventure.
+3. Persist orders in a simple backend structure
 
-If you achieve this, you’ve completed the **Day 8 primary goal**
+   For the primary goal, it is enough to:
 
-#### Resources
-- https://docs.livekit.io/agents/build/prompting/
-- https://docs.livekit.io/agents/build/tools/
+   - Keep an in-memory list of orders per session, or
+   - Append to a `orders.json` file.
+
+   Each order should at least include:
+
+   - A generated order ID.
+   - Product ID(s).
+   - Quantity.
+   - Price and currency.
+   - Timestamp.
+
+4. Provide a minimal way to view the last order
+
+   Examples:
+
+   - User: “What did I just buy?”
+   - Agent reads back the most recent order summary from the backend.
+
+### Data Model Requirements
+
+Keep the schema simple but structured. For example:
+
+- Product:
+  - `id`, `name`, `description`, `price`, `currency`, `category`, optional attributes (color, size, etc.).
+- Order:
+  - `id`, `items` (list of product IDs + quantities), `total`, `currency`, `created_at`.
+
+You can store the catalog in a static Python list or a JSON file.
+
+### Minimal Python Scaffolding (Example)
+
+You are free to design your own shapes.  
+The following is only a guiding example of how to organize things:
+
+```python
+# example_catalog.py (guidance only)
+PRODUCTS = [
+    {
+        "id": "mug-001",
+        "name": "Stoneware Coffee Mug",
+        "price": 800,
+        "currency": "INR",
+        "category": "mug",
+        "color": "white",
+    },
+    # Add a few more products...
+]
+
+ORDERS = []
+
+def list_products(filters: dict | None = None) -> list[dict]:
+    # Apply naive filtering by category, max_price, color, etc.
+    # Return a list of products.
+    ...
+
+def create_order(line_items: list[dict]) -> dict:
+    # line_items: [{ "product_id": "...", "quantity": 1 }, ...]
+    # Look up products, compute total, create an order dict,
+    # append to ORDERS, and return the order.
+    ...
+```
+
+From your LLM tool-calling layer, you should be calling functions like `list_products` and `create_order` instead of handling catalog/order logic inside the prompt.
+
 ---
 
-## Advanced Goals
+## Advanced Goals (Optional)
 
-Pick any **one or more** of these to go beyond a simple GM.  
-These will make your agent feel more like a real game engine than just a chat.
+The advanced goals are about moving from a “lite” ACP-inspired flow toward something closer to a real ACP-style integration.
 
----
-
-### 1. JSON World State: Characters, Events, and World Info
-
-> **Goal:** Maintain a structured JSON “world state” that the GM updates and uses to guide the story.
-
-Instead of relying only on past messages, introduce a **Python-side data structure** (in memory is fine) that tracks things like:
-
-- `characters`
-  - Player character (name, class, HP, inventory, traits)
-  - Important NPCs (name, role, attitude towards player)
-- `locations`
-  - Current location name, description, known paths
-- `events`
-  - Key events that have happened (met NPC X, completed quest Y, angered faction Z)
-- `quests`
-  - Active / completed objectives
-
-The GM should:
-
-1. **Update this JSON state** after each turn (or when something important happens).
-2. **Consult this state** when deciding what happens next.
-   - Example: If an NPC is dead in the JSON, they shouldn’t suddenly reappear alive.
-3. Keep it in a place where you can **inspect it easily** (e.g., log to console or show in UI).
-
-You do _not_ need a database; in-memory JSON per session is enough.
+You can pick any subset of these goals.
 
 ---
 
-### 2. Player Character Sheet & Inventory
+### Advanced Goal 1: ACP-Style Merch API + UI “Click to Buy”
 
-> **Goal:** Track player stats and items in the JSON state and expose them to the player.
+Implement a more structured “merchant API” and a simple UI product list where the user can click to buy.
 
-Build on the world state by adding a **character sheet**:
+Requirements:
 
-- HP / health or a simple “status” (Healthy / Injured / Critical)
-- Some attributes (e.g., Strength / Intelligence / Luck) – can just be numbers or tags
-- Inventory: list of items with optional properties (e.g., “magic sword”, “health potion”)
+1. Expose HTTP endpoints (or equivalent function router) on the backend inspired by ACP ideas:
 
-The GM should:
+   - `GET /acp/catalog` – returns products as JSON.
+   - `POST /acp/orders` – accepts an order payload and returns an order object.
 
-- Update inventory when:
-  - Player picks up / loses items
-- Use stats to:
-  - Adjust outcomes (e.g., “you’re strong, so you succeed more easily”)
-- Be able to **answer questions** like:
-  - “What do I have in my bag?”
-  - “How much health do I have left?”
+2. In React:
 
-Frontend bonus: show a simple **Character panel** that reflects this JSON.
+   - Render the product catalog in a list/grid using the backend endpoint.
+   - Add a simple “Buy” or “Add to cart” button for each product.
+   - When the user clicks “Buy”, send a request that creates an order via the ACP-style endpoint.
+
+3. Keep the voice assistant integrated:
+
+   - The user can still place orders by voice.
+   - The UI buttons are an alternative path, not a replacement.
+
+You do not need payment forms or real checkout. Confirming the order in your UI and logs is enough.
 
 ---
 
-### 3. Simple Mechanics: Checks and Dice Rolls
+### Advanced Goal 2: Closer Alignment with ACP Data Shapes
 
-> **Goal:** Add light game mechanics that make decisions more interesting than pure storytelling.
+Rather than inventing your own JSON from scratch, move your models a bit closer to ACP-style shapes.
 
 Ideas:
 
-- Add `diceRoll` logic in Python (e.g., random number 1–20).
-- When the player attempts something risky:
-  - Perform a roll + apply modifiers from attributes.
-  - Decide outcome tier: Fail / Partial success / Full success.
-- Let the GM describe the outcome accordingly.
+- Introduce a `line_items` list in orders:
 
-You can either:
+  - Each with `product_id`, `quantity`, `unit_amount`, `currency`.
 
-- Keep dice purely backend and let GM describe results, **or**
-- Show the dice roll in the UI (e.g., “Roll: 14 (Success)”).
+- Include buyer info:
 
----
+  - A simple `buyer` object with name or email.
 
-### 4. Multiple Universes via System Message Presets
+- Add an order `status` field:
 
-> **Goal:** Let the player choose the universe and swap the GM’s behavior accordingly.
+  - Possible values like `PENDING`, `CONFIRMED`, `CANCELLED`.
 
-At the start of the game (or from a settings panel):
-
-- Let user pick from a few **preset universes**:
-  - “Classic fantasy”
-  - “Cyberpunk city”
-  - “Space opera”
-- Each universe:
-  - Uses a different system prompt.
-  - Optionally initializes a different **baseline JSON world template**.
-
+You do not need to fully implement the official schemas, but use them as inspiration for naming and structure (e.g., line items, totals, currency fields).
 
 ---
 
-### 5. Save & Resume Game
+### Advanced Goal 3: Cart and Multi-Step Flow
 
-> **Goal:** Allow exporting and re-importing the JSON world state so a game can be resumed later.\*\*
+Move from “single-shot order” to a minimal shopping cart.
 
-This is primarily an engineering challenge, not an LLM one:
+Examples:
 
-- Add a “Save Game” button:
-  - Serializes the JSON world state and (optionally) last few messages.
-  - Maybe just download as a `.json` file or keep it in localStorage.
-- Add a “Load Game” button:
-  - Restores that JSON into memory.
-  - Tells the GM what happened so far (through a short summary or direct JSON).
+1. Cart operations:
 
-Even a very rough implementation here is impressive.
+   - “Add this mug to my cart.”
+   - “Remove the t-shirt from my cart.”
+   - “What’s in my cart right now?”
+
+2. Checkout step:
+
+   - After the user says “checkout”, call `create_order` with the cart contents.
+   - Reset the cart after successful order creation.
+
+Backend:
+
+- Maintain a per-session cart structure.
+- Only convert the cart into an order when the user confirms.
+
+---
+
+### Advanced Goal 4: Order History and Status Queries
+
+Add a minimal order history/query capability.
+
+Examples:
+
+- “What have I bought from you before?”
+- “Show me the last 3 orders.”
+- “What’s the total I spent today?”
+
+Backend:
+
+- Keep all orders in a JSON file or database-like structure.
+- Implement simple query functions:
+
+  - List all orders.
+  - Filter by date/time.
+  - Compute aggregated totals (e.g., sum of totals for a time range).
+
+The assistant should be able to answer these questions using those functions.
+
+---
+
+### Advanced Goal 5: Experiment with a Type-Safe ACP Library (Optional)
+
+If you want to go deeper into ACP itself, you can experiment with an existing ACP library in Python that provides typed models for the protocol.
+
+For example:
+
+- Use the library’s data classes / models for:
+
+  - Product-like entities.
+  - Orders / line items.
+
+- Serialize and log requests/responses in a way that resembles what a real ACP merchant or client might send.
+
+This is optional and primarily useful if you are curious about real-world ACP integrations.
+
+---
+
+## Implementation Notes (Non-binding)
+
+- Backend:
+
+  - Separate:
+
+    - Conversation logic (LLM/tool calls),
+    - Commerce logic (catalog, cart, orders).
+
+  - Start with function calls for the primary goal.
+  - Add HTTP endpoints later for advanced goals.
+
+- Frontend:
+
+  - For the primary goal:
+
+    - Simple transcript area and an optional “Last order summary” panel is enough.
+
+  - For advanced goals:
+
+    - Add a basic product list with “Buy” buttons.
+    - No need to over-design the UI; focus on correctness and flow.
+
+Start simple: get the catalog and voice ordering working end-to-end.
+Then gradually move toward ACP-inspired structure and UI once the basics are solid.
+
+## References
+
+- [Agentic Commerce Protocol](https://www.agenticcommerce.dev/)
+- [Agentic Commerce Protocol GitHub](https://github.com/agentic-commerce-protocol/agentic-commerce-protocol)
+- [OpenAI ACP Docs](https://developers.openai.com/commerce)
+- https://docs.livekit.io/agents/build/tools/
+- https://docs.livekit.io/home/client/data/text-streams/
+- https://docs.livekit.io/home/client/data/rpc/
 
 -----
 
-- Step 1: You only need the **primary goal** to complete Day 8; the **Advanced Goals** are for going the extra mile.
-- Step 2: **Successfully connect to Voice Game Master (D&D-Style Adventure)** in your browser and talk through game scenario.
-- Step 3: **Record a short video** of your session with the agent.
-- Step 4: **Post the video on LinkedIn** with a description of what you did for the task on Day 8. Also, mention that you are building voice agent using the fastest TTS API - Murf Falcon. Mention that you are part of the **“Murf AI Voice Agent Challenge”** and don't forget to tag the official Murf AI handle. Also, use hashtags **#MurfAIVoiceAgentsChallenge** and **#10DaysofAIVoiceAgents**
+- Step 1: You only need the **primary goal** to complete Day 9; the **Advanced Goals** are for going the extra mile.
+- Step 2: **Successfully connect to E-commerce Agent** in your browser, browse product catalog and place order.
+- Step 3: **Record a short video** of your session with the agent and show the order JSON file.
+- Step 4: **Post the video on LinkedIn** with a description of what you did for the task on Day 9. Also, mention that you are building voice agent using the fastest TTS API - Murf Falcon. Mention that you are part of the **“Murf AI Voice Agent Challenge”** and don't forget to tag the official Murf AI handle. Also, use hashtags **#MurfAIVoiceAgentsChallenge** and **#10DaysofAIVoiceAgents**
 
-Once your agent is running and your LinkedIn post is live, you’ve completed Day 8.
+Once your agent is running and your LinkedIn post is live, you’ve completed Day 9.
